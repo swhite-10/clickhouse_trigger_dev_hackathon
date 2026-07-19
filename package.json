@@ -1,0 +1,33 @@
+{
+  "name": "gh-pulse",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3",
+    "@ai-sdk/otel": "^1",
+    "@ai-sdk/vue": "^4",
+    "@clickhouse/client": "^1",
+    "@trigger.dev/sdk": "^4",
+    "ai": "^7",
+    "echarts": "^6",
+    "nuxt": "^4",
+    "vue": "^3",
+    "vue-echarts": "^8",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "trigger.dev": "^4"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.23.1": true,
+    "@depot/cli@0.0.1-cli.2.80.0": true,
+    "@parcel/watcher@2.5.6": true
+  }
+}
