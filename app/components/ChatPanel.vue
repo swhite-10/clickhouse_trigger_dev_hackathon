@@ -34,9 +34,20 @@ function send() {
       <div v-for="m in chat.messages" :key="m.id" class="msg" :class="m.role">
         <template v-for="(part, i) in m.parts" :key="i">
           <p v-if="part.type === 'text'" class="text">{{ part.text }}</p>
-          <div v-else-if="part.type === 'tool-trending_repos'" class="tool">
-            <p v-if="part.state !== 'output-available'" class="meta">running query…</p>
-            <ToolChart v-else :output="part.output" />
+          <div v-else-if="part.type.startsWith('tool-')" class="tool">
+            <p v-if="part.state !== 'output-available'" class="meta">
+              {{ part.state === 'output-error' ? `query failed: ${part.errorText}` : 'running query…' }}
+            </p>
+            <p v-else-if="part.output?.error" class="meta error">
+              query failed, agent is retrying — {{ part.output.error }}
+            </p>
+            <template v-else>
+              <ToolChart :output="part.output" />
+              <details v-if="part.output?.sql" class="sql">
+                <summary>SQL</summary>
+                <pre>{{ part.output.sql }}</pre>
+              </details>
+            </template>
           </div>
         </template>
       </div>
@@ -90,6 +101,27 @@ function send() {
 .hint {
   color: #9aa0a6;
   font-size: 0.85rem;
+}
+.meta.error {
+  color: #f7a8a8;
+}
+.sql {
+  margin-top: 0.5rem;
+}
+.sql summary {
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.sql pre {
+  background: #25272c;
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
+  color: #b8f7e4;
+  overflow-x: auto;
+  white-space: pre-wrap;
 }
 .ask {
   display: flex;
