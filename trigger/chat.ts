@@ -13,13 +13,23 @@ const clickhouse = createClient({
 })
 
 const chartSchema = z.object({
-  type: z.enum(['bar', 'line', 'table']).describe('bar = ranking/top-N, line = time series, table = fallback'),
-  x: z.string().describe('column alias for the category/time axis — must exactly match a SELECT alias'),
-  y: z.string().describe('column alias for the numeric value axis'),
+  type: z
+    .enum(['bar', 'line', 'area', 'scatter', 'heatmap', 'calendar', 'pie', 'treemap', 'sankey', 'table'])
+    .describe('see the Charts section of the system prompt for when to use each'),
+  x: z
+    .string()
+    .describe('column alias for the category/time/x axis (sankey: source; calendar: date) — must exactly match a SELECT alias'),
+  y: z
+    .string()
+    .describe('column alias for the numeric value axis (heatmap: y-axis category alias; sankey: target alias)'),
   series: z
     .string()
     .optional()
-    .describe('line charts only: column alias that splits rows into one line per distinct value'),
+    .describe('line/area/scatter: alias splitting rows into one series per value; treemap: parent-group alias'),
+  value: z
+    .string()
+    .optional()
+    .describe('heatmap/sankey only: column alias holding the numeric cell/flow value'),
   title: z.string().describe('short human-readable chart title'),
 })
 
@@ -107,8 +117,16 @@ Therefore: make ONE tool call per question unless it genuinely needs several dif
 - Time series: bucket with toDate() / toStartOfWeek() / toStartOfMonth() and ORDER BY the time column ascending.
 
 ## Charts
+Pick the type that maximises insight per pixel — vary them; don't default everything to bar.
 - bar: rankings / top-N. x = category alias, y = numeric alias, ORDER BY y DESC.
-- line: time series. x = time alias, y = numeric alias; optional series = alias splitting into one line per value (keep to <= 6 distinct values).
+- line: trends over time. x = time alias, y = numeric alias; optional series = alias splitting into one line per value (keep to <= 6 distinct values).
+- area: composition or volume over time — like line but filled; with a series alias the areas stack (e.g. event-type mix per month).
+- scatter: relationship between two measures across entities (e.g. issues opened vs PRs merged per repo — use countIf() to compute both in one query). x and y are numeric aliases; optional series colours groups.
+- heatmap: intensity across two categorical dimensions; requires x, y AND value (e.g. x = toHour(created_at) AS hour, y = toDayOfWeek(created_at) AS day, value = count() AS c). Perfect for "when is X most active" questions.
+- calendar: GitHub-contribution-style daily calendar. x = toDate(created_at) AS d, y = count() AS c, one row per day, at most ~1 year of days. Perfect for "show activity over the year" on a repo or user.
+- pie: share of a whole across <= 10 categories (e.g. event-type share for a repo). x = category alias, y = value alias.
+- treemap: composition across many categories, optionally grouped (e.g. an org's activity by repo — series = a parent-group alias if there is a natural grouping). x = name alias, y = size alias.
+- sankey: flows between two DIFFERENT sets of things; requires x = source alias, y = target alias, value = flow size (e.g. top contributors -> the repos they push to). Keep <= 12 nodes per side; source and target must be different kinds of entity.
 - table: only when no chart fits.
 
 If run_sql returns an error, fix the SQL and try again (max 3 attempts), then briefly explain what failed.

@@ -22,6 +22,10 @@ body {
   max-width: 860px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
+  height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 h1 {
   color: #b8f7e4;

@@ -1,7 +1,8 @@
 // Guardrails for agent-written SQL. First line of defence only — the real
 // enforcement is the readonly ClickHouse role the queries run under.
 
-export const MAX_ROWS = 200
+// 500 so a one-year daily calendar (365 rows) and multi-series time series fit.
+export const MAX_ROWS = 500
 
 const FORBIDDEN = [
   'insert',
