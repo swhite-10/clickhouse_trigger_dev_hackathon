@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue'
 import { TriggerChatTransport } from '@trigger.dev/sdk/chat'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
+// Agent text is model-generated markdown; sanitize after parsing since it
+// goes in via v-html. Safe here: ChatPanel is client-only (DOMPurify needs DOM).
+function renderMarkdown(text: string) {
+  return DOMPurify.sanitize(marked.parse(text, { async: false }))
+}
 
 const chatId = crypto.randomUUID()
 
@@ -33,7 +41,7 @@ function send() {
     <div class="messages">
       <div v-for="m in chat.messages" :key="m.id" class="msg" :class="m.role">
         <template v-for="(part, i) in m.parts" :key="i">
-          <p v-if="part.type === 'text'" class="text">{{ part.text }}</p>
+          <div v-if="part.type === 'text'" class="text" v-html="renderMarkdown(part.text)" />
           <div v-else-if="part.type.startsWith('tool-')" class="tool">
             <p v-if="part.state !== 'output-available'" class="meta">
               {{ part.state === 'output-error' ? `query failed: ${part.errorText}` : 'running query…' }}
@@ -95,7 +103,44 @@ function send() {
 }
 .text {
   margin: 0.25rem 0;
-  white-space: pre-wrap;
+}
+.text :deep(p) {
+  margin: 0.25rem 0;
+}
+.text :deep(strong) {
+  color: #b8f7e4;
+  font-weight: 600;
+}
+.text :deep(a) {
+  color: #b8f7e4;
+}
+.text :deep(code) {
+  background: #25272c;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+}
+.text :deep(pre) {
+  background: #25272c;
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  overflow-x: auto;
+}
+.text :deep(ul),
+.text :deep(ol) {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+.text :deep(table) {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.text :deep(th),
+.text :deep(td) {
+  border-bottom: 1px solid #3c4043;
+  padding: 0.3rem 0.6rem;
+  text-align: left;
 }
 .meta,
 .hint {
