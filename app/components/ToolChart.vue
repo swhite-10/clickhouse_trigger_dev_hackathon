@@ -9,6 +9,7 @@ import {
   PieChart,
   TreemapChart,
   SankeyChart,
+  RadarChart,
 } from 'echarts/charts'
 import {
   GridComponent,
@@ -17,6 +18,7 @@ import {
   LegendComponent,
   VisualMapComponent,
   CalendarComponent,
+  RadarComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 
@@ -29,12 +31,14 @@ use([
   PieChart,
   TreemapChart,
   SankeyChart,
+  RadarChart,
   GridComponent,
   TooltipComponent,
   TitleComponent,
   LegendComponent,
   VisualMapComponent,
   CalendarComponent,
+  RadarComponent,
 ])
 
 type Row = Record<string, unknown>
@@ -60,7 +64,7 @@ const PALETTE = [
   '#d78ef7',
   '#f7f08e',
 ]
-const CHARTABLE = ['bar', 'line', 'area', 'scatter', 'heatmap', 'calendar', 'pie', 'treemap', 'sankey']
+const CHARTABLE = ['bar', 'line', 'area', 'scatter', 'heatmap', 'calendar', 'pie', 'treemap', 'sankey', 'radar']
 
 const fmt = (n: number) => {
   const abs = Math.abs(n)
@@ -72,10 +76,21 @@ const fmt = (n: number) => {
 
 // The agent's descriptor is a claim about the result shape — verify it before
 // charting, and fall back to a table when it doesn't hold.
+const isStat = computed(() => {
+  const { rows, chart } = props.output
+  return chart.type === 'stat' && rows.length > 0 && chart.y in (rows[0] ?? {})
+})
+
+const statValue = computed(() => fmt(Number(props.output.rows[0]?.[props.output.chart.y] ?? 0)))
+
 const descriptorValid = computed(() => {
   const { rows, chart } = props.output
   if (rows.length === 0 || !CHARTABLE.includes(chart.type)) return false
   const cols = Object.keys(rows[0] ?? {})
+  if (chart.type === 'radar') {
+    // Every non-x column becomes an axis; need at least 3 of them.
+    return cols.includes(chart.x) && cols.filter((c) => c !== chart.x).length >= 3
+  }
   if (!cols.includes(chart.x) || !cols.includes(chart.y)) return false
   if (chart.series && !cols.includes(chart.series)) return false
   if (['heatmap', 'sankey'].includes(chart.type) && (!chart.value || !cols.includes(chart.value))) {
@@ -323,6 +338,40 @@ const option = computed(() => {
     }
   }
 
+  if (chart.type === 'radar') {
+    const metrics = Object.keys(rows[0] ?? {}).filter((c) => c !== chart.x)
+    const indicator = metrics.map((m) => ({
+      name: m,
+      max: Math.max(...rows.map((r) => Number(r[m]))) * 1.1 || 1,
+    }))
+    return {
+      ...base.value,
+      tooltip: {},
+      legend: { bottom: 0, textStyle: { color: '#9aa0a6' } },
+      radar: {
+        indicator,
+        center: ['50%', '52%'],
+        radius: '58%',
+        axisName: { color: '#9aa0a6' },
+        axisLine: { lineStyle: { color: '#3c4043' } },
+        splitLine: { lineStyle: { color: '#3c4043' } },
+        splitArea: { show: false },
+      },
+      series: [
+        {
+          type: 'radar',
+          data: rows.map((r, i) => ({
+            name: String(r[chart.x]),
+            value: metrics.map((m) => Number(r[m])),
+            itemStyle: { color: PALETTE[i % PALETTE.length] },
+            lineStyle: { color: PALETTE[i % PALETTE.length], width: 2 },
+            areaStyle: { opacity: 0.15 },
+          })),
+        },
+      ],
+    }
+  }
+
   // Horizontal bar: reverse so the top-ranked row renders at the top.
   const ordered = [...rows].reverse()
   return {
@@ -349,6 +398,7 @@ const height = computed(() => {
   if (chart.type === 'calendar') return 280
   if (chart.type === 'pie') return 380
   if (chart.type === 'treemap') return 400
+  if (chart.type === 'radar') return 380
   if (chart.type === 'sankey') {
     return Math.max(320, [...new Set(rows.map((r) => String(r[chart.y])))].length * 28 + 100)
   }
@@ -358,7 +408,11 @@ const height = computed(() => {
 
 <template>
   <div>
-    <template v-if="descriptorValid">
+    <div v-if="isStat" class="stat">
+      <p class="stat-value">{{ statValue }}</p>
+      <p class="stat-label">{{ output.chart.title }}</p>
+    </div>
+    <template v-else-if="descriptorValid">
       <VChart :option="option" :autoresize="true" :style="{ height: `${height}px`, width: '100%' }" />
     </template>
     <div v-else-if="output.rows.length > 0" class="table-wrap">
@@ -377,7 +431,7 @@ const height = computed(() => {
       </table>
     </div>
     <p v-else class="meta">No rows matched.</p>
-    <p class="meta">
+    <p v-if="!isStat" class="meta">
       {{ output.rows.length }} rows{{ output.truncated ? ' (truncated)' : '' }} ·
       {{ output.durationMs }}ms in ClickHouse
     </p>
@@ -389,6 +443,25 @@ const height = computed(() => {
   color: #9aa0a6;
   font-size: 0.8rem;
   margin: 0.25rem 0 0;
+}
+.stat {
+  background: #25272c;
+  border: 1px solid #3c4043;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  text-align: center;
+}
+.stat-value {
+  color: #b8f7e4;
+  font-size: 1.9rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.1;
+}
+.stat-label {
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0;
 }
 .table-wrap {
   overflow-x: auto;

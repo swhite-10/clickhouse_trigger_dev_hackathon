@@ -9,11 +9,30 @@ Built for the ClickHouse + Trigger.dev Virtual Summer Hackathon
 
 ## Stack
 
-- **Nuxt 4 + vue-echarts** — the visual layer is the product
+- **Nuxt 4 + Apache ECharts** (via the thin `vue-echarts` wrapper) — the visual
+  layer is the product; ECharts was chosen over Nuxt-specific chart kits for
+  its deeper catalog (calendar heatmaps, sankey, treemap, …)
 - **ClickHouse Cloud** — `github_events` (OLAP, primary database)
 - **Trigger.dev `chat.agent()`** — the conversational agent runtime
 - **Postgres** — OLTP for the app itself: sessions, messages, rendered charts
 - **Langfuse** — agent observability (itself powered by ClickHouse)
+
+## How it works
+
+The agent answers every question by writing ClickHouse SQL plus a chart
+descriptor `{type, x, y, series?, value?, title}` naming the columns to plot.
+Guardrails wrap the SQL before it runs (single read-only SELECT, table
+allowlist, keyword blocklist, LIMIT injection); query errors flow back to the
+agent, which fixes its SQL and retries. The frontend validates the descriptor
+against the actual result shape and renders it with ECharts — eleven panel
+types (bar, line, area, scatter, heatmap, calendar, pie, treemap, sankey,
+radar, stat cards) with a table fallback — alongside the query itself,
+disclosable under every chart.
+
+Broad questions ("what can you tell me about repo X?") go through
+`run_dashboard`: the agent composes 6–8 panels — headline stat cards plus a
+mix of chart types — and every query runs against ClickHouse in parallel, so
+a full dashboard lands in roughly the time of its slowest query.
 
 ## Running locally
 
