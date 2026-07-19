@@ -249,6 +249,17 @@ const option = computed(() => {
   }
 
   if (chart.type === 'treemap') {
+    // When every name shares an 'owner/' prefix (org-scoped questions), the
+    // prefix eats the label space in small boxes — drop it from labels only;
+    // tooltips keep the full name.
+    const names = [...new Set(rows.map((r) => String(r[chart.x])))]
+    const slash = names[0]?.indexOf('/') ?? -1
+    const prefix =
+      names.length > 1 && slash > 0 && names.every((n) => n.startsWith(names[0]!.slice(0, slash + 1)))
+        ? names[0]!.slice(0, slash + 1)
+        : ''
+    const shortLabel = (p: { name: string }) =>
+      prefix && p.name.startsWith(prefix) ? p.name.slice(prefix.length) : p.name
     const data = chart.series
       ? [...new Set(rows.map((r) => String(r[chart.series!])))].map((group) => ({
           name: group,
@@ -268,7 +279,7 @@ const option = computed(() => {
           roam: false,
           nodeClick: false,
           breadcrumb: { show: false },
-          label: { color: '#25272c', fontWeight: 600 },
+          label: { color: '#25272c', fontWeight: 600, formatter: shortLabel },
           upperLabel: chart.series
             ? { show: true, color: '#e8eaed', height: 22 }
             : undefined,
