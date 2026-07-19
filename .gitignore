@@ -1,0 +1,22 @@
+# local planning notes — never committed
+PLAN.md
+
+# secrets never live on disk (op run resolves infra/env/.env.template),
+# but ignore stray root env files defensively (anchored so the committed
+# template under infra/env/ is unaffected)
+/.env
+/.env.*
+
+# node / nuxt
+node_modules
+.nuxt
+.output
+dist
+.data
+
+# trigger.dev
+.trigger
+
+# misc
+.DS_Store
+*.log
