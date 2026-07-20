@@ -12,12 +12,19 @@ let pool: Pool | undefined
 function getPool(): Pool | undefined {
   const url = process.env.DATABASE_URL
   if (!url) return undefined
-  pool ??= new Pool({
-    connectionString: url,
-    max: 3,
-    // Cloud Postgres requires TLS; the local Docker instance doesn't speak it.
-    ssl: /localhost|127\.0\.0\.1/.test(url) ? undefined : { rejectUnauthorized: false },
-  })
+  if (!pool) {
+    // node-postgres upgrades the URL's sslmode=require to verify-full AND
+    // lets it override any explicit `ssl` config — Cloud Postgres's chain
+    // doesn't verify from Node's CA store, so connections died with
+    // UNABLE_TO_VERIFY_LEAF_SIGNATURE (psql on the same URL works because
+    // libpq's `require` never verifies). uselibpqcompat opts into those
+    // libpq semantics: TLS on, no cert verification — the posture the
+    // issued connection string actually asks for. Local URLs carry no
+    // sslmode and pass through untouched.
+    const conn = new URL(url)
+    if (conn.searchParams.has('sslmode')) conn.searchParams.set('uselibpqcompat', 'true')
+    pool = new Pool({ connectionString: conn.toString(), max: 3 })
+  }
   return pool
 }
 
