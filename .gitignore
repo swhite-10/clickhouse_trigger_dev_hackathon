@@ -17,6 +17,12 @@ dist
 # trigger.dev
 .trigger
 
+# clickhousectl project-local state (local server/postgres data dirs)
+.clickhouse
+
+# seed resume state (make seed)
+.seed-progress.json
+
 # misc
 .DS_Store
 *.log

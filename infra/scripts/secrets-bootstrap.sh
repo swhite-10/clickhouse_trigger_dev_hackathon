@@ -58,5 +58,29 @@ ensure_item clickhouse \
   "username[text]=play" \
   "password[password]=paste-from-clickhouse-cloud-console"
 
+# Postgres (OLTP chat capture). Placeholder until a real instance exists —
+# the template's DATABASE_URL line stays commented until then, so the
+# placeholder is never used (capture is disabled when DATABASE_URL is unset).
+ensure_item postgres \
+  "url[password]=paste-postgres-connection-url"
+
+# ClickHouse Cloud admin creds (default user) — used only by make ch-setup
+# and make seed, never by the app (which runs as the readonly gh_pulse_ro).
+# ro-password is a generated (not console-issued) credential: the password
+# ch-setup.sh assigns to the new gh_pulse_ro user it creates. Lives here
+# because it's a setup-time secret, not the app's runtime one — the app's
+# clickhouse item only gets it copied over at actual cutover.
+ensure_item clickhouse-admin \
+  "url[text]=https://paste-cloud-host:8443" \
+  "username[text]=default" \
+  "password[password]=paste-from-cloud-console" \
+  "ro-password[password]=paste-or-generate-a-random-value"
+
+# ClickHouse Cloud API key (Admin role) — lets clickhousectl cloud manage
+# services, including the Postgres service. Console -> API keys.
+ensure_item clickhouse-cloud-api \
+  "key[text]=paste-api-key-id" \
+  "secret[password]=paste-api-key-secret"
+
 echo "==> verifying"
 exec bash "$(dirname "$0")/secrets-check.sh"
