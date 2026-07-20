@@ -92,6 +92,8 @@ ensure_item clickhouse-cloud-api \
 ensure_item langfuse \
   "public-key[text]=pk-lf-$(uuidgen | tr '[:upper:]' '[:lower:]')" \
   "secret-key[password]=sk-lf-$(uuidgen | tr '[:upper:]' '[:lower:]')" \
+  "user-email[text]=admin@gh-pulse.local" \
+  "user-name[text]=admin" \
   "user-password[password]=$(openssl rand -hex 16)" \
   "salt[password]=$(openssl rand -hex 32)" \
   "encryption-key[password]=$(openssl rand -hex 32)" \
