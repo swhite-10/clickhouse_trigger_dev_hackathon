@@ -15,8 +15,11 @@ install: ## Install node dependencies
 dev: ## Nuxt dev server (localhost:3000) with secrets from 1Password
 	$(OP_RUN) npx nuxt dev
 
+# Not @latest: the CLI hard-aborts when its version drifts from the
+# installed @trigger.dev/sdk, so run the locally-pinned CLI — npm keeps
+# the two in lockstep in package.json (both pinned exact).
 trigger-dev: ## Run the chat agent locally against Trigger.dev cloud
-	$(OP_RUN) npx trigger.dev@latest dev
+	$(OP_RUN) npx trigger.dev dev
 
 build: ## Production build
 	$(OP_RUN) npx nuxt build

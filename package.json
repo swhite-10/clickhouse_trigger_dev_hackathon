@@ -13,8 +13,9 @@
     "@ai-sdk/otel": "^1",
     "@ai-sdk/vue": "^4",
     "@clickhouse/client": "^1",
+    "@opentelemetry/api": "1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.218.0",
-    "@trigger.dev/sdk": "^4",
+    "@trigger.dev/sdk": "4.5.5",
     "ai": "^7",
     "dompurify": "^3.4.12",
     "echarts": "^6",
@@ -27,7 +28,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
-    "trigger.dev": "^4"
+    "trigger.dev": "4.5.5"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
