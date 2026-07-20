@@ -12,8 +12,10 @@ VAULT="gh-pulse"
 
 command -v op >/dev/null 2>&1 || {
   echo "FAIL: op CLI not installed — https://developer.1password.com/docs/cli/"; exit 1; }
-op whoami >/dev/null 2>&1 || {
-  echo "FAIL: not signed in — run: op signin"; exit 1; }
+# Not `op whoami`: it reports signed-out under the desktop-app integration
+# even when every real operation works. Exercise the actual auth path.
+op vault list >/dev/null 2>&1 || {
+  echo "FAIL: op CLI can't reach an account — sign in via the 1Password app or: op signin"; exit 1; }
 
 # Vault: create if missing; refuse to guess if the name is ambiguous.
 count=$(op vault list --format=json | grep -c "\"name\": \"$VAULT\"") || true

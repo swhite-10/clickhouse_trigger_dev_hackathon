@@ -16,8 +16,10 @@ if ! command -v op >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! op whoami >/dev/null 2>&1; then
-  echo "  FAIL  not signed in — run: op signin"
+# Not `op whoami`: it reports signed-out under the desktop-app integration
+# even when every real operation works. Exercise the actual auth path.
+if ! op vault list >/dev/null 2>&1; then
+  echo "  FAIL  op CLI can't reach an account — sign in via the 1Password app or: op signin"
   exit 1
 fi
 echo "  OK    signed in"
