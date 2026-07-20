@@ -4,7 +4,7 @@
 ENV_FILE := infra/env/.env.template
 OP_RUN   := op run --env-file=$(ENV_FILE) --
 
-.PHONY: help install dev trigger-dev build secrets-bootstrap secrets-check pg-schema pg-schema-cloud ch-setup seed seed-recent
+.PHONY: help install dev trigger-dev build secrets-bootstrap secrets-check pg-schema pg-schema-cloud ch-setup seed seed-recent langfuse-up langfuse-down
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -40,8 +40,19 @@ seed: ## Stream the demo dataset playground -> ClickHouse Cloud (resumable)
 seed-recent: ## Refresh the rolling 30-day window (run before the demo)
 	$(OP_RUN) node infra/ch/seed.mjs --recent
 
+# The one docker-compose exception (everything else via clickhousectl):
+# Langfuse is an appliance of five services — web, worker, and its own
+# ClickHouse, Redis, MinIO, Postgres. Secrets come from 1Password at start;
+# `down` keeps the data volumes, so traces survive restarts.
+langfuse-up: ## Start the Langfuse appliance (UI: http://localhost:3005)
+	op run --env-file=infra/langfuse/.env.template -- docker compose -f infra/langfuse/docker-compose.yml up -d
+
+langfuse-down: ## Stop the Langfuse appliance (data volumes persist)
+	docker compose -f infra/langfuse/docker-compose.yml down
+
 secrets-bootstrap: ## One-time: create the 1Password vault + placeholder items
 	bash infra/scripts/secrets-bootstrap.sh
 
 secrets-check: ## Verify every op:// reference resolves (read-only)
 	bash infra/scripts/secrets-check.sh $(ENV_FILE)
+	bash infra/scripts/secrets-check.sh infra/langfuse/.env.template

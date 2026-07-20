@@ -41,6 +41,12 @@ row count, and ClickHouse latency. The app's own telemetry is queryable
 (`infra/pg/schema.sql`). Capture is fail-open: it never blocks a chat turn,
 and without a `DATABASE_URL` it simply switches off.
 
+Observability closes the loop: the Trigger.dev worker exports its OTel trace
+— task spans plus every model call and tool execution — to a self-hosted
+[Langfuse](https://langfuse.com) (`make langfuse-up`, UI on `localhost:3005`),
+which itself stores traces in its own ClickHouse. Same fail-open contract:
+no Langfuse keys in the environment, no exporter.
+
 ## Running locally
 
 Secrets never touch disk — the [1Password CLI](https://developer.1password.com/docs/cli/)
@@ -54,6 +60,7 @@ make secrets-check      # verify every reference resolves
 
 make trigger-dev        # terminal 1: the chat agent
 make dev                # terminal 2: Nuxt on localhost:3000
+make langfuse-up        # optional: Langfuse observability on localhost:3005
 ```
 
 *Work in progress — build window 17–23 July 2026.*

@@ -84,5 +84,23 @@ ensure_item clickhouse-cloud-api \
   "key[text]=paste-api-key-id" \
   "secret[password]=paste-api-key-secret"
 
+# Langfuse appliance (infra/langfuse) — the one item whose secrets are all
+# GENERATED here rather than pasted: headless init consumes them on first
+# boot, so `make langfuse-up` works with zero UI steps. public/secret-key
+# follow Langfuse's pk-lf-/sk-lf- convention; the rest are service passwords
+# and crypto material the compose file interpolates.
+ensure_item langfuse \
+  "public-key[text]=pk-lf-$(uuidgen | tr '[:upper:]' '[:lower:]')" \
+  "secret-key[password]=sk-lf-$(uuidgen | tr '[:upper:]' '[:lower:]')" \
+  "user-password[password]=$(openssl rand -hex 16)" \
+  "salt[password]=$(openssl rand -hex 32)" \
+  "encryption-key[password]=$(openssl rand -hex 32)" \
+  "nextauth-secret[password]=$(openssl rand -hex 32)" \
+  "postgres-password[password]=$(openssl rand -hex 16)" \
+  "clickhouse-password[password]=$(openssl rand -hex 16)" \
+  "redis-password[password]=$(openssl rand -hex 16)" \
+  "minio-password[password]=$(openssl rand -hex 16)"
+
 echo "==> verifying"
-exec bash "$(dirname "$0")/secrets-check.sh"
+bash "$(dirname "$0")/secrets-check.sh" infra/env/.env.template
+exec bash "$(dirname "$0")/secrets-check.sh" infra/langfuse/.env.template
