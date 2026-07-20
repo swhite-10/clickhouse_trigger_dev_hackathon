@@ -3,6 +3,8 @@ import { streamText, stepCountIs, tool } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { createClient } from '@clickhouse/client'
+import { trace } from '@opentelemetry/api'
+import type { ModelMessage } from 'ai'
 import { guardSql, MAX_ROWS } from './sql-guard'
 import { captureTurn } from './capture'
 
@@ -162,17 +164,59 @@ run_dashboard runs every panel's query in parallel and renders a grid. Compose i
 If run_sql returns an error, fix the SQL and try again (max 3 attempts), then briefly explain what failed.
 `.trim()
 
+const CACHE_BREAKPOINT = {
+  anthropic: { cacheControl: { type: 'ephemeral' as const } },
+}
+
+// Trace enrichment for Langfuse: without this, traces list unnamed and
+// ungrouped. Langfuse promotes `langfuse.*` attributes found on ANY span
+// to trace-level properties — but NOT from the run's active span: a
+// chat.agent run parks between turns, its root span never ends, and OTel
+// only exports ended spans. So the attributes ride a zero-work child span
+// that ends (and therefore exports) immediately.
+function latestUserText(messages: ModelMessage[]): string | undefined {
+  const last = [...messages].reverse().find((m) => m.role === 'user')
+  if (!last) return undefined
+  const text =
+    typeof last.content === 'string'
+      ? last.content
+      : last.content
+          .map((part) => (part.type === 'text' ? part.text : ''))
+          .join(' ')
+  const trimmed = text.trim()
+  if (!trimmed) return undefined
+  return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed
+}
+
 export const ghPulseChat = chat.agent({
   id: 'gh-pulse-chat',
   tools,
   onTurnComplete: captureTurn,
-  run: async ({ messages, tools, signal }) =>
-    streamText({
+  run: async ({ chatId, messages, tools, signal }) => {
+    trace.getTracer('gh-pulse').startActiveSpan('trace-meta', (span) => {
+      span.setAttributes({
+        'langfuse.trace.name': latestUserText(messages) ?? 'gh-pulse chat turn',
+        'langfuse.session.id': chatId,
+      })
+      span.end()
+    })
+    return streamText({
       ...chat.toStreamTextOptions({ tools }),
       model: anthropic('claude-opus-4-8'),
-      system: SYSTEM_PROMPT,
-      messages,
+      // Two prompt-cache breakpoints (Anthropic caches the prefix up to
+      // each): `instructions` covers tools + system — the static prefix
+      // every step of every chat shares — and the last incoming message
+      // covers the conversation so far, so step 2 of a turn and every
+      // later turn within the 5-minute TTL re-read it at 10% of input
+      // price. The system prompt rides `instructions` in message form
+      // (a plain string can't carry providerOptions, and AI SDK v7
+      // rejects system messages inside `messages`).
+      instructions: { role: 'system', content: SYSTEM_PROMPT, providerOptions: CACHE_BREAKPOINT },
+      messages: messages.map((m, i) =>
+        i === messages.length - 1 ? { ...m, providerOptions: CACHE_BREAKPOINT } : m,
+      ),
       abortSignal: signal,
       stopWhen: stepCountIs(10),
-    }),
+    })
+  },
 })
