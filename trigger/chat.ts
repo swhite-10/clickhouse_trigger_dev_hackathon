@@ -4,6 +4,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { createClient } from '@clickhouse/client'
 import { guardSql, MAX_ROWS } from './sql-guard'
+import { captureTurn } from './capture'
 
 // Defaults to the public playground so the loop works before Cloud creds land.
 const clickhouse = createClient({
@@ -164,6 +165,7 @@ If run_sql returns an error, fix the SQL and try again (max 3 attempts), then br
 export const ghPulseChat = chat.agent({
   id: 'gh-pulse-chat',
   tools,
+  onTurnComplete: captureTurn,
   run: async ({ messages, tools, signal }) =>
     streamText({
       ...chat.toStreamTextOptions({ tools }),

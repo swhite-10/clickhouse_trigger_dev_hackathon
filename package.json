@@ -19,11 +19,13 @@
     "echarts": "^6",
     "marked": "^18.0.6",
     "nuxt": "^4",
+    "pg": "^8.22.0",
     "vue": "^3",
     "vue-echarts": "^8",
     "zod": "^4"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
     "trigger.dev": "^4"
   },
   "allowScripts": {

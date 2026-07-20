@@ -34,6 +34,13 @@ Broad questions ("what can you tell me about repo X?") go through
 mix of chart types — and every query runs against ClickHouse in parallel, so
 a full dashboard lands in roughly the time of its slowest query.
 
+Every completed turn is captured to Postgres (the OLTP side of the pairing):
+session rollups, full messages — so past charts re-render without re-querying
+ClickHouse — and one row per executed query with its SQL, chart descriptor,
+row count, and ClickHouse latency. The app's own telemetry is queryable
+(`infra/pg/schema.sql`). Capture is fail-open: it never blocks a chat turn,
+and without a `DATABASE_URL` it simply switches off.
+
 ## Running locally
 
 Secrets never touch disk — the [1Password CLI](https://developer.1password.com/docs/cli/)
