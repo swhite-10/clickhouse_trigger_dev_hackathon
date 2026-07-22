@@ -111,23 +111,22 @@ export const tools = {
     }),
     execute: async ({ hours, limit, followups }) => {
       const started = Date.now()
-      const result = await clickhouse.query({
-        query: `
-          SELECT repo_name, count() AS stars
-          FROM github_events
-          WHERE event_type = 'WatchEvent'
-            AND created_at > now() - INTERVAL {hours:UInt32} HOUR
-          GROUP BY repo_name
-          ORDER BY stars DESC
-          LIMIT {limit:UInt32}
-        `,
-        query_params: { hours, limit },
-        format: 'JSONEachRow',
-      })
+      // Parameters inlined (they're validated ints) so the exact statement
+      // lands in the SQL disclosure and the Postgres capture like the
+      // agent-written queries do.
+      const sql = `SELECT repo_name, count() AS stars
+FROM github_events
+WHERE event_type = 'WatchEvent'
+  AND created_at > now() - INTERVAL ${hours} HOUR
+GROUP BY repo_name
+ORDER BY stars DESC
+LIMIT ${limit}`
+      const result = await clickhouse.query({ query: sql, format: 'JSONEachRow' })
       const rows = await result.json<{ repo_name: string; stars: string }>()
       return {
         rows: rows.map((r) => ({ repo: r.repo_name, stars: Number(r.stars) })),
         durationMs: Date.now() - started,
+        sql,
         chart: { type: 'bar', x: 'repo', y: 'stars', title: `Stars gained, last ${hours}h` },
         followups,
       }
