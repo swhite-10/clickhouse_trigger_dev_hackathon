@@ -237,6 +237,20 @@ export const ghPulseChat = chat.agent({
     return streamText({
       ...chat.toStreamTextOptions({ tools }),
       model: anthropic('claude-opus-4-8'),
+      // Opus writes the SQL (step 1, and any step following a failed query,
+      // where it must diagnose and rewrite). Once the last step's tools all
+      // succeeded, the remaining work is a 1-2 sentence wrap-up + follow-up
+      // chips — Sonnet does that in roughly half the latency, which is ~25%
+      // off every turn's wall time.
+      prepareStep: ({ stepNumber, steps }) => {
+        if (stepNumber === 0) return {}
+        const last = steps[steps.length - 1]
+        const failed = (last?.toolResults ?? []).some((r) => {
+          const out = r.output as { error?: string; panels?: { error?: string }[] } | undefined
+          return !!out?.error || (out?.panels ?? []).some((p) => p.error)
+        })
+        return failed ? {} : { model: anthropic('claude-sonnet-5') }
+      },
       // Two prompt-cache breakpoints (Anthropic caches the prefix up to
       // each): `instructions` covers tools + system — the static prefix
       // every step of every chat shares — and the last incoming message
