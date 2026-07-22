@@ -109,7 +109,8 @@ const followups = computed<string[]>(() => {
 })
 
 // Canvas blocks: every tool part, tagged with the user question that caused
-// it, newest first — the freshest chart always renders at the top.
+// it, in conversation order — both panes read top-to-bottom and auto-scroll
+// to the newest entry, so the eye moves the same way on each side.
 const blocks = computed(() => {
   const out: { key: string; question: string; part: AnyPart }[] = []
   let question = ''
@@ -125,7 +126,7 @@ const blocks = computed(() => {
       if (isTool(part)) out.push({ key: `${m.id}:${i}`, question, part })
     })
   }
-  return out.reverse()
+  return out
 })
 
 const railScroller = ref<HTMLElement>()
@@ -190,10 +191,10 @@ watch(
   { deep: true },
 )
 watch(
-  () => blocks.value[0]?.key,
+  () => blocks.value[blocks.value.length - 1]?.key,
   async () => {
     await nextTick()
-    canvasEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
+    canvasEl.value?.scrollTo({ top: canvasEl.value.scrollHeight, behavior: 'smooth' })
   },
 )
 </script>
