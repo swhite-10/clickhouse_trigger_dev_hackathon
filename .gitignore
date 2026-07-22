@@ -1,5 +1,6 @@
 # local planning notes — never committed
 PLAN.md
+DEMO.md
 
 # secrets never live on disk (op run resolves infra/env/.env.template),
 # but ignore stray root env files defensively (anchored so the committed

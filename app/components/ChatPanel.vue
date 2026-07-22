@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue'
-import { TriggerChatTransport } from '@trigger.dev/sdk/chat'
+import { TriggerChatTransport, type ChatSessionPersistedState } from '@trigger.dev/sdk/chat'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
@@ -10,7 +10,23 @@ function renderMarkdown(text: string) {
   return DOMPurify.sanitize(marked.parse(text, { async: false }))
 }
 
-const chatId = crypto.randomUUID()
+// The conversation survives a page refresh: the transport's session state
+// (scoped token + stream resume cursor) persists to sessionStorage, completed
+// turns rehydrate from the Postgres capture, and an in-flight stream resumes
+// via the transport's reconnect path. sessionStorage keeps it per-tab — a new
+// tab is a new conversation.
+const STORAGE_KEY = 'gh-pulse-session'
+type PersistedSession = { chatId: string; session: ChatSessionPersistedState }
+
+const restored: PersistedSession | null = (() => {
+  try {
+    return JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')
+  } catch {
+    return null
+  }
+})()
+
+const chatId = restored?.chatId ?? crypto.randomUUID()
 
 const transport = new TriggerChatTransport({
   task: 'gh-pulse-chat',
@@ -23,9 +39,19 @@ const transport = new TriggerChatTransport({
   },
   startSession: ({ chatId, clientData }) =>
     $fetch('/api/chat/session', { method: 'POST', body: { chatId, clientData } }),
+  sessions: restored ? { [chatId]: restored.session } : undefined,
+  onSessionChange: (id, session) => {
+    if (session) sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ chatId: id, session }))
+    else sessionStorage.removeItem(STORAGE_KEY)
+  },
 })
 
 const chat = new Chat({ id: chatId, transport })
+
+function newChat() {
+  sessionStorage.removeItem(STORAGE_KEY)
+  location.assign(location.pathname)
+}
 
 const input = ref('')
 function send() {
@@ -106,7 +132,56 @@ const blocks = computed(() => {
 const railScroller = ref<HTMLElement>()
 const canvasEl = ref<HTMLElement>()
 const inputEl = ref<HTMLInputElement>()
-onMounted(() => inputEl.value?.focus())
+// True while a restored session is fetching its history — gates the
+// template so a refresh doesn't flash the landing page before the
+// conversation reappears.
+const restoring = ref(!!restored)
+
+onMounted(async () => {
+  inputEl.value?.focus()
+  if (!restored) return
+  // Completed turns come back from Postgres (no ClickHouse re-queries);
+  // an interrupted turn then resumes its live stream from the session.
+  let hist: { messages: { role?: string }[] } = { messages: [] }
+  try {
+    hist = await $fetch<{ messages: { role?: string }[] }>('/api/chat/history', {
+      query: { chatId },
+    })
+    if (hist.messages.length) chat.messages = hist.messages as never
+  } catch {
+    // best-effort: a failed history fetch shouldn't block new messages
+  }
+  // Resume only when a reply is actually owed (last captured message is the
+  // user's, or nothing was captured yet). The persisted isStreaming flag
+  // alone can be stale — its final "done" update doesn't always flush before
+  // the refresh — and resuming an idle session parks the chat in 'streaming'
+  // until the SSE times out, hiding the follow-up chips.
+  const shouldResume = restored.session.isStreaming && hist.messages.at(-1)?.role !== 'assistant'
+  if (shouldResume) chat.resumeStream()
+  if (hist.messages.length || !shouldResume) {
+    restoring.value = false
+  } else {
+    // History was empty but a turn is being replayed (refresh mid-first-turn,
+    // before capture flushed): the launcher would flash if restoring dropped
+    // now. Hold it until the replayed chunks land — or give up after 8s so a
+    // dead resume can't strand the loading state.
+    const stop = watch(
+      () => chat.messages.length,
+      (n) => {
+        if (n > 0) {
+          restoring.value = false
+          stop()
+        }
+      },
+    )
+    setTimeout(() => {
+      restoring.value = false
+      stop()
+    }, 8000)
+  }
+  await nextTick()
+  inputEl.value?.focus()
+})
 watch(
   () => chat.messages,
   async () => {
@@ -126,7 +201,9 @@ watch(
 
 <template>
   <div class="chat" :class="{ split: hasMessages }">
-    <template v-if="!hasMessages">
+    <p v-if="restoring && !hasMessages" class="restoring">Restoring conversation…</p>
+
+    <template v-else-if="!hasMessages">
       <div class="home-scroll">
         <HomeLauncher @ask="ask" />
       </div>
@@ -138,6 +215,9 @@ watch(
 
     <template v-else>
       <aside class="rail">
+        <div class="rail-top">
+          <button class="newchat" type="button" @click="newChat">+ New chat</button>
+        </div>
         <div ref="railScroller" class="rail-messages">
           <div v-for="m in chat.messages" :key="m.id" class="msg" :class="m.role">
             <template v-for="(part, i) in m.parts" :key="i">
@@ -232,6 +312,11 @@ watch(
   overflow-y: auto;
   display: flex;
 }
+.restoring {
+  color: #9aa0a6;
+  font-size: 0.9rem;
+  padding: 2rem 0;
+}
 .chat.split {
   display: grid;
   grid-template-columns: minmax(290px, 350px) 1fr;
@@ -243,6 +328,25 @@ watch(
   min-height: 0;
   border-right: 1px solid #33363b;
   padding-right: 1.75rem;
+}
+.rail-top {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 0.25rem 0 0;
+}
+.newchat {
+  border: 1px solid #3c4043;
+  background: none;
+  color: #9aa0a6;
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.newchat:hover {
+  color: #b8f7e4;
+  border-color: #57b899;
 }
 .rail-messages {
   display: flex;
