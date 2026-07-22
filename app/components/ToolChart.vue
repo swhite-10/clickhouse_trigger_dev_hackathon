@@ -48,6 +48,7 @@ const props = defineProps<{
     rows: Row[]
     durationMs: number
     truncated?: boolean
+    source?: string
     chart: { type: string; x: string; y: string; series?: string; value?: string; title: string }
   }
 }>()
@@ -541,7 +542,7 @@ const height = computed(() => {
     <p v-else class="meta">No rows matched.</p>
     <p v-if="!isStat" class="meta">
       {{ output.rows.length }} rows{{ output.truncated ? ' (truncated)' : '' }} ·
-      {{ output.durationMs }}ms in ClickHouse
+      {{ output.durationMs }}ms in {{ output.source ?? 'ClickHouse' }}
     </p>
   </div>
 </template>

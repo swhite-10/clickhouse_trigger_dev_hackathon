@@ -1,6 +1,15 @@
 <script setup lang="ts">
 // Fixture gallery for eyeballing chart layout without LLM turns: /?gallery=1
 const showGallery = computed(() => import.meta.client && location.search.includes('gallery'))
+
+// Chat keeps its in-flight session state across tab switches (v-show); the
+// pulse view remounts on every open (v-if) so its telemetry is always fresh.
+const view = ref<'chat' | 'pulse'>('chat')
+// Deep-link (?pulse=1) resolves after mount: deciding during setup would
+// desync hydration from the server-rendered header (stale tab highlight).
+onMounted(() => {
+  if (location.search.includes('pulse')) view.value = 'pulse'
+})
 </script>
 
 <template>
@@ -8,10 +17,17 @@ const showGallery = computed(() => import.meta.client && location.search.include
     <header class="top">
       <h1>gh-pulse</h1>
       <p class="sub">Ask about GitHub activity — get charts, not paragraphs.</p>
+      <nav v-if="!showGallery" class="tabs">
+        <button type="button" :class="{ on: view === 'chat' }" @click="view = 'chat'">Chat</button>
+        <button type="button" :class="{ on: view === 'pulse' }" @click="view = 'pulse'">App pulse</button>
+      </nav>
     </header>
     <ClientOnly>
       <ChartGallery v-if="showGallery" />
-      <ChatPanel v-else />
+      <template v-else>
+        <ChatPanel v-show="view === 'chat'" />
+        <PulsePanel v-if="view === 'pulse'" />
+      </template>
       <template #fallback>
         <p class="loading">Loading chat…</p>
       </template>
@@ -63,6 +79,29 @@ h1 {
   color: #9aa0a6;
   margin: 0;
   font-size: 0.9rem;
+}
+.tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+.tabs button {
+  border: 1px solid transparent;
+  background: none;
+  color: #9aa0a6;
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tabs button:hover {
+  color: #e8eaed;
+}
+.tabs button.on {
+  color: #b8f7e4;
+  border-color: #57b899;
+  background: rgba(184, 247, 228, 0.06);
 }
 .loading {
   padding: 2rem 0;

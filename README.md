@@ -70,8 +70,11 @@ Every completed turn is captured to Postgres (the OLTP side of the pairing):
 session rollups, full messages — so past charts re-render without re-querying
 ClickHouse — and one row per executed query with its SQL, chart descriptor,
 row count, and ClickHouse latency. The app's own telemetry is queryable
-(`infra/pg/schema.sql`). Capture is fail-open: it never blocks a chat turn,
-and without a `DATABASE_URL` it simply switches off.
+(`infra/pg/schema.sql`) — and visible: the **App pulse** tab dashboards it
+through the same chart components the agent uses (sessions, query volume,
+chart-type mix, ClickHouse latency, the last queries run), served entirely
+from Postgres. Capture is fail-open: it never blocks a chat turn, and without
+a `DATABASE_URL` it simply switches off.
 
 Observability closes the loop: the Trigger.dev worker exports its OTel trace
 — task spans plus every model call and tool execution — to a self-hosted
