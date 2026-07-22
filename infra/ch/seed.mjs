@@ -74,7 +74,7 @@ const INSIGHT_TYPES = "'WatchEvent', 'ForkEvent', 'IssuesEvent', 'PullRequestEve
 // across resumed runs — duplicates by drifting boundaries are impossible.
 const GLOBAL_WHERE = `NOT ${CURATED_ANY}`
 const GLOBAL_END = '2026-07-23 00:00:00'
-const GLOBAL_DAYS = 92
+const GLOBAL_DAYS = 30
 const GLOBAL_CHUNK_HOURS = 4
 
 const url = need('CLICKHOUSE_ADMIN_URL')
