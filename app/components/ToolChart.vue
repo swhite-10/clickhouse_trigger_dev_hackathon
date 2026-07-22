@@ -101,22 +101,60 @@ const descriptorValid = computed(() => {
 
 const columns = computed(() => Object.keys(props.output.rows[0] ?? {}))
 
+// Container width drives how hard category labels get truncated: a dashboard
+// cell can only spare ~40% of itself for bar labels, a full-width panel more.
+const wrap = ref<HTMLElement | null>(null)
+const wrapWidth = ref(800)
+let ro: ResizeObserver | undefined
+onMounted(() => {
+  if (!wrap.value) return
+  ro = new ResizeObserver((entries) => {
+    const w = entries[0]?.contentRect.width
+    if (w) wrapWidth.value = w
+  })
+  ro.observe(wrap.value)
+})
+onUnmounted(() => ro?.disconnect())
+
 const base = computed(() => ({
-  title: { text: props.output.chart.title, textStyle: { color: '#e8eaed', fontSize: 14 } },
-  textStyle: { color: '#9aa0a6' },
-  grid: { left: 10, right: 30, top: 40, bottom: 10, containLabel: true },
+  title: { text: props.output.chart.title, textStyle: { color: '#e8eaed', fontSize: 13 } },
+  textStyle: { color: '#9aa0a6', fontSize: 11 },
+  grid: { left: 10, right: 30, top: 36, bottom: 10, containLabel: true },
 }))
 
-const valueAxis = { type: 'value', splitLine: { lineStyle: { color: '#3c4043' } }, axisLabel: { formatter: fmt } }
-const categoryAxis = { type: 'category', axisLine: { lineStyle: { color: '#3c4043' } } }
+const valueAxis = {
+  type: 'value',
+  splitLine: { lineStyle: { color: '#3c4043' } },
+  axisLabel: { formatter: fmt, fontSize: 11 },
+}
+const categoryAxis = {
+  type: 'category',
+  axisLine: { lineStyle: { color: '#3c4043' } },
+  axisLabel: { fontSize: 11 },
+}
+
+// One-row scrollable legend pinned under the plot: can't collide with the
+// title or spill over the chart no matter how many series come back.
+const scrollLegend = {
+  type: 'scroll' as const,
+  bottom: 0,
+  itemWidth: 16,
+  itemHeight: 8,
+  textStyle: { color: '#9aa0a6', fontSize: 11 },
+  pageIconColor: '#b8f7e4',
+  pageIconInactiveColor: '#3c4043',
+  pageTextStyle: { color: '#9aa0a6' },
+}
 
 const mintVisualMap = (values: number[]) => ({
   min: 0,
   max: Math.max(...values),
+  text: [fmt(Math.max(...values)), '0'],
   orient: 'horizontal' as const,
   left: 'center' as const,
   bottom: 0,
-  textStyle: { color: '#9aa0a6' },
+  itemHeight: 90,
+  textStyle: { color: '#9aa0a6', fontSize: 10 },
   inRange: { color: ['#2d3035', '#57b899', '#b8f7e4'] },
 })
 
@@ -147,8 +185,8 @@ const option = computed(() => {
     return {
       ...base.value,
       tooltip: { trigger: 'axis', valueFormatter: fmt },
-      legend: names.length > 1 ? { top: 24, textStyle: { color: '#9aa0a6' } } : undefined,
-      grid: { ...base.value.grid, top: names.length > 1 ? 56 : 40 },
+      legend: names.length > 1 ? scrollLegend : undefined,
+      grid: { ...base.value.grid, bottom: names.length > 1 ? 28 : 10 },
       xAxis: { ...categoryAxis, data: xs },
       yAxis: valueAxis,
       series,
@@ -172,10 +210,25 @@ const option = computed(() => {
         formatter: (p: { value: [number, number] }) =>
           `${chart.x}: ${fmt(p.value[0])}<br/>${chart.y}: ${fmt(p.value[1])}`,
       },
-      legend: names.length > 1 ? { top: 24, textStyle: { color: '#9aa0a6' } } : undefined,
-      grid: { ...base.value.grid, top: names.length > 1 ? 56 : 40 },
-      xAxis: { ...valueAxis, name: chart.x, nameTextStyle: { color: '#9aa0a6' } },
-      yAxis: { ...valueAxis, name: chart.y, nameTextStyle: { color: '#9aa0a6' } },
+      legend: names.length > 1 ? scrollLegend : undefined,
+      // Axis names sit mid-axis (y rotated): the default end-of-axis spots
+      // collide with the centered title / clip at the right edge in a cell.
+      grid: { ...base.value.grid, left: 26, bottom: names.length > 1 ? 54 : 36 },
+      xAxis: {
+        ...valueAxis,
+        name: chart.x,
+        nameLocation: 'middle',
+        nameGap: 26,
+        nameTextStyle: { color: '#9aa0a6', fontSize: 11 },
+      },
+      yAxis: {
+        ...valueAxis,
+        name: chart.y,
+        nameLocation: 'middle',
+        nameRotate: 90,
+        nameGap: 42,
+        nameTextStyle: { color: '#9aa0a6', fontSize: 11 },
+      },
       series,
     }
   }
@@ -221,10 +274,10 @@ const option = computed(() => {
         left: 50,
         right: 20,
         range: [dates[0], dates[dates.length - 1]],
-        cellSize: ['auto', 14],
-        dayLabel: { color: '#9aa0a6', firstDay: 1 },
-        monthLabel: { color: '#9aa0a6' },
-        yearLabel: { color: '#e8eaed' },
+        cellSize: ['auto', 13],
+        dayLabel: { color: '#9aa0a6', firstDay: 1, fontSize: 10 },
+        monthLabel: { color: '#9aa0a6', fontSize: 10 },
+        yearLabel: { color: '#e8eaed', fontSize: 12 },
         itemStyle: { color: '#2d3035', borderColor: '#25272c' },
         splitLine: { lineStyle: { color: '#3c4043' } },
       },
@@ -245,15 +298,15 @@ const option = computed(() => {
     return {
       ...base.value,
       tooltip: { valueFormatter: fmt },
-      legend: { type: 'scroll', bottom: 0, textStyle: { color: '#9aa0a6' }, pageIconColor: '#b8f7e4' },
+      legend: scrollLegend,
       color: PALETTE,
       series: [
         {
           type: 'pie',
-          radius: ['42%', '66%'],
-          center: ['50%', '50%'],
-          minShowLabelAngle: 10,
-          label: { color: '#e8eaed', formatter: '{b}: {d}%' },
+          radius: ['40%', '62%'],
+          center: ['50%', '47%'],
+          minShowLabelAngle: 12,
+          label: { color: '#e8eaed', fontSize: 11, formatter: '{b}: {d}%' },
           labelLayout: { hideOverlap: true },
           labelLine: { lineStyle: { color: '#3c4043' } },
           itemStyle: { borderColor: '#25272c', borderWidth: 2 },
@@ -294,9 +347,9 @@ const option = computed(() => {
           roam: false,
           nodeClick: false,
           breadcrumb: { show: false },
-          label: { color: '#25272c', fontWeight: 600, formatter: shortLabel },
+          label: { color: '#25272c', fontWeight: 600, fontSize: 11, formatter: shortLabel },
           upperLabel: chart.series
-            ? { show: true, color: '#e8eaed', height: 22 }
+            ? { show: true, color: '#e8eaed', height: 20, fontSize: 11 }
             : undefined,
           itemStyle: { borderColor: '#25272c', borderWidth: 2, gapWidth: 2 },
           data,
@@ -310,6 +363,15 @@ const option = computed(() => {
     const targets = [...new Set(rows.map((r) => String(r[chart.y])))]
     // Sankey requires distinct node names; suffix any target that collides.
     const targetName = (t: string) => (sources.includes(t) ? `${t} ` : t)
+    // Same trick as treemap: when every target shares an 'owner/' prefix the
+    // right-column labels clip — strip it from labels only.
+    const slash = targets[0]?.indexOf('/') ?? -1
+    const prefix =
+      slash > 0 && targets.every((t) => t.startsWith(targets[0]!.slice(0, slash + 1)))
+        ? targets[0]!.slice(0, slash + 1)
+        : ''
+    const shortLabel = (p: { name: string }) =>
+      prefix && p.name.startsWith(prefix) ? p.name.slice(prefix.length) : p.name
     return {
       ...base.value,
       tooltip: { valueFormatter: fmt },
@@ -321,7 +383,7 @@ const option = computed(() => {
           left: 10,
           right: 130,
           nodeAlign: 'justify',
-          label: { color: '#e8eaed' },
+          label: { color: '#e8eaed', fontSize: 11, formatter: shortLabel },
           lineStyle: { color: 'gradient', opacity: 0.35 },
           itemStyle: { borderWidth: 0 },
           data: [
@@ -347,12 +409,12 @@ const option = computed(() => {
     return {
       ...base.value,
       tooltip: {},
-      legend: { bottom: 0, textStyle: { color: '#9aa0a6' } },
+      legend: scrollLegend,
       radar: {
         indicator,
-        center: ['50%', '52%'],
-        radius: '58%',
-        axisName: { color: '#9aa0a6' },
+        center: ['50%', '50%'],
+        radius: '56%',
+        axisName: { color: '#9aa0a6', fontSize: 10 },
         axisLine: { lineStyle: { color: '#3c4043' } },
         splitLine: { lineStyle: { color: '#3c4043' } },
         splitArea: { show: false },
@@ -373,12 +435,53 @@ const option = computed(() => {
   }
 
   // Horizontal bar: reverse so the top-ranked row renders at the top.
+  // Labels can be issue titles — cap them or they eat the whole plot width
+  // in a dashboard cell (tooltips carry the full text).
+  const barCategoryAxis = (data: string[]) => ({
+    ...categoryAxis,
+    data,
+    axisLabel: {
+      fontSize: 11,
+      width: Math.max(120, Math.round(wrapWidth.value * 0.42)),
+      overflow: 'truncate' as const,
+    },
+  })
+
+  // With a series alias: stacked segments per category (composition across
+  // categories, e.g. community mix per repo).
+  if (chart.series) {
+    const xs = [...new Set(rows.map((r) => String(r[chart.x])))].reverse()
+    const names = [...new Set(rows.map((r) => String(r[chart.series!])))]
+    return {
+      ...base.value,
+      tooltip: { valueFormatter: fmt },
+      legend: scrollLegend,
+      grid: { ...base.value.grid, bottom: 28 },
+      xAxis: valueAxis,
+      yAxis: barCategoryAxis(xs),
+      series: names.map((name, i) => {
+        const byX = new Map(
+          rows
+            .filter((r) => String(r[chart.series!]) === name)
+            .map((r) => [String(r[chart.x]), Number(r[chart.y])]),
+        )
+        return {
+          name,
+          type: 'bar',
+          stack: 'total',
+          data: xs.map((x) => byX.get(x) ?? 0),
+          itemStyle: { color: PALETTE[i % PALETTE.length] },
+        }
+      }),
+    }
+  }
+
   const ordered = [...rows].reverse()
   return {
     ...base.value,
     tooltip: { valueFormatter: fmt },
     xAxis: valueAxis,
-    yAxis: { ...categoryAxis, data: ordered.map((r) => String(r[chart.x])) },
+    yAxis: barCategoryAxis(ordered.map((r) => String(r[chart.x]))),
     series: [
       {
         type: 'bar',
@@ -392,22 +495,27 @@ const option = computed(() => {
 const height = computed(() => {
   const { rows, chart } = props.output
   if (chart.type === 'heatmap') {
-    return Math.max(240, [...new Set(rows.map((r) => String(r[chart.y])))].length * 30 + 130)
+    return Math.max(230, [...new Set(rows.map((r) => String(r[chart.y])))].length * 26 + 120)
   }
-  if (chart.type === 'bar') return Math.max(220, rows.length * 26 + 60)
-  if (chart.type === 'calendar') return 280
-  if (chart.type === 'pie') return 380
-  if (chart.type === 'treemap') return 400
-  if (chart.type === 'radar') return 380
+  if (chart.type === 'bar') {
+    const bars = chart.series ? [...new Set(rows.map((r) => String(r[chart.x])))].length : rows.length
+    return Math.max(200, bars * 24 + 56 + (chart.series ? 24 : 0))
+  }
+  // Calendar rows are fixed-height (7 × 13px cells + labels), so the panel
+  // can be short regardless of width.
+  if (chart.type === 'calendar') return 205
+  if (chart.type === 'pie') return 340
+  if (chart.type === 'treemap') return 360
+  if (chart.type === 'radar') return 350
   if (chart.type === 'sankey') {
-    return Math.max(320, [...new Set(rows.map((r) => String(r[chart.y])))].length * 28 + 100)
+    return Math.max(300, [...new Set(rows.map((r) => String(r[chart.y])))].length * 26 + 90)
   }
-  return 320
+  return 300
 })
 </script>
 
 <template>
-  <div>
+  <div ref="wrap">
     <div v-if="isStat" class="stat">
       <p class="stat-value">{{ statValue }}</p>
       <p class="stat-label">{{ output.chart.title }}</p>

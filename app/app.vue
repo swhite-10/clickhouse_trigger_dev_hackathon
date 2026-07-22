@@ -1,3 +1,8 @@
+<script setup lang="ts">
+// Fixture gallery for eyeballing chart layout without LLM turns: /?gallery=1
+const showGallery = computed(() => import.meta.client && location.search.includes('gallery'))
+</script>
+
 <template>
   <main class="wrap">
     <header class="top">
@@ -5,7 +10,8 @@
       <p class="sub">Ask about GitHub activity — get charts, not paragraphs.</p>
     </header>
     <ClientOnly>
-      <ChatPanel />
+      <ChartGallery v-if="showGallery" />
+      <ChatPanel v-else />
       <template #fallback>
         <p class="loading">Loading chat…</p>
       </template>
@@ -14,6 +20,11 @@
 </template>
 
 <style>
+/* Everything sizes in rem; 14px root keeps the whole UI comfortable on a
+   13.6" laptop (≈1280pt viewport) without per-component tweaks. */
+html {
+  font-size: 14px;
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #25272c;
@@ -25,7 +36,7 @@ body {
   scrollbar-color: #3c4043 transparent;
 }
 .wrap {
-  max-width: 1240px;
+  max-width: 1720px;
   margin: 0 auto;
   padding: 0 2rem;
   height: 100dvh;
