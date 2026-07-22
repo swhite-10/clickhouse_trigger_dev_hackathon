@@ -17,6 +17,33 @@ Built for the ClickHouse + Trigger.dev Virtual Summer Hackathon
 - **Postgres** — OLTP for the app itself: sessions, messages, rendered charts
 - **Langfuse** — agent observability (itself powered by ClickHouse)
 
+## Architecture
+
+```mermaid
+flowchart LR
+    U([Browser<br/>Nuxt + ECharts]) -- question --> T[Trigger.dev task<br/>chat.agent loop]
+    T -- "SQL (guarded, read-only)" --> CH[(ClickHouse Cloud<br/>github_events)]
+    T -- turn capture --> PG[(Postgres<br/>sessions · messages · queries)]
+    T -. OTel traces .-> LF[Langfuse<br/>self-hosted, on ClickHouse]
+    CH -- rows --> T
+    T -- "chart descriptors + rows" --> U
+```
+
+## What's in the data
+
+Two tiers, one table (`github_events`, sort key `(event_type, repo_name, created_at)`):
+
+- **Curated, full history since 2019, all event types** — the `ClickHouse`,
+  `duckdb` and `vuejs` orgs, plus `facebook/react`, `microsoft/vscode`,
+  `anthropics/claude-code` and `triggerdotdev/trigger.dev`. Multi-year trends,
+  push rhythms, contributor churn: all answerable here.
+- **Global, last 90 days** — every public repo, but only the five headline
+  event types (watch/fork/issues/PRs/releases). Enough for "what's trending"
+  and recent comparisons of any repo.
+
+The agent knows this contract and words its answers (and its suggested
+follow-up questions) to stay inside it.
+
 ## How it works
 
 The agent answers every question by writing ClickHouse SQL plus a chart
@@ -25,9 +52,14 @@ Guardrails wrap the SQL before it runs (single read-only SELECT, table
 allowlist, keyword blocklist, LIMIT injection); query errors flow back to the
 agent, which fixes its SQL and retries. The frontend validates the descriptor
 against the actual result shape and renders it with ECharts — eleven panel
-types (bar, line, area, scatter, heatmap, calendar, pie, treemap, sankey,
-radar, stat cards) with a table fallback — alongside the query itself,
-disclosable under every chart.
+types (bar incl. stacked, line, area, scatter, heatmap, calendar, pie,
+treemap, sankey, radar, stat cards) with a table fallback — alongside the
+query itself, disclosable under every chart. Every answer ends with 2–3
+model-proposed follow-up chips, phrased to be clicked verbatim.
+
+Every chart shape is pinned down by a fixture gallery (`/?gallery=1`) that
+renders all of them through the real chart component at dashboard-cell and
+full width — layout regressions show up in a screenshot, not mid-demo.
 
 Broad questions ("what can you tell me about repo X?") go through
 `run_dashboard`: the agent composes 6–8 panels — headline stat cards plus a
@@ -58,9 +90,16 @@ make secrets-bootstrap  # one-time: creates the gh-pulse vault + placeholder ite
 # paste real values (Trigger.dev keys, Anthropic key) — see the template header
 make secrets-check      # verify every reference resolves
 
+make ch-setup           # one-time: github_events schema + readonly role on ClickHouse Cloud
+make seed               # stream the dataset from the ClickHouse playground (resumable)
+
 make trigger-dev        # terminal 1: the chat agent
 make dev                # terminal 2: Nuxt on localhost:3000
 make langfuse-up        # optional: Langfuse observability on localhost:3005
 ```
+
+Day-to-day: `make seed-recent` tops up the last 3 days of global events, and
+`make warm` wakes ClickHouse Cloud after idle — the first query on a cold
+cluster pays ~20s of resume; every one after that is milliseconds.
 
 *Work in progress — build window 17–23 July 2026.*

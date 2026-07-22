@@ -4,7 +4,11 @@
 ENV_FILE := infra/env/.env.template
 OP_RUN   := op run --env-file=$(ENV_FILE) --
 
-.PHONY: help install dev trigger-dev build secrets-bootstrap secrets-check pg-schema pg-schema-cloud ch-setup seed seed-recent langfuse-up langfuse-down
+.PHONY: help install dev trigger-dev build warm secrets-bootstrap secrets-check pg-schema pg-schema-cloud ch-setup seed seed-recent langfuse-up langfuse-down
+
+# Node 22+ prints ExperimentalWarnings for loaders nuxt/trigger rely on;
+# silence just that class, keep every other warning.
+export NODE_OPTIONS := --disable-warning=ExperimentalWarning
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -40,8 +44,13 @@ ch-setup: ## ClickHouse Cloud one-time: github_events schema + readonly role
 seed: ## Stream the demo dataset playground -> ClickHouse Cloud (resumable)
 	$(OP_RUN) node infra/ch/seed.mjs
 
-seed-recent: ## Refresh the rolling 30-day window (run before the demo)
+seed-recent: ## Re-pull the last 3 days of global events (run before the demo)
 	$(OP_RUN) node infra/ch/seed.mjs --recent
+
+# Cloud idles after inactivity and the first query pays ~20s of resume
+# (observed repeatedly in traces). Run this a minute before any demo.
+warm: ## Wake ClickHouse Cloud so the first real query isn't slow
+	@$(OP_RUN) sh -c 'time curl -sS -u "$$CLICKHOUSE_USER:$$CLICKHOUSE_PASSWORD" "$$CLICKHOUSE_URL" --data-binary "SELECT count() FROM github_events"'
 
 # The one docker-compose exception (everything else via clickhousectl):
 # Langfuse is an appliance of five services — web, worker, and its own
