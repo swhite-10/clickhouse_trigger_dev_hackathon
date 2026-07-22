@@ -31,18 +31,25 @@ flowchart LR
 
 ## What's in the data
 
-Two tiers, one table (`github_events`, sort key `(event_type, repo_name, created_at)`):
+Two tiers, one table (`github_events`, sort key `(event_type, repo_name, created_at)`),
+streamed from the [ClickHouse playground](https://play.clickhouse.com)'s GH Archive
+dataset by a resumable, quota-aware seeder (`infra/ch/seed.mjs`):
 
-- **Curated, full history since 2019, all event types** — the `ClickHouse`,
-  `duckdb` and `vuejs` orgs, plus `facebook/react`, `microsoft/vscode`,
-  `anthropics/claude-code` and `triggerdotdev/trigger.dev`. Multi-year trends,
-  push rhythms, contributor churn: all answerable here.
-- **Global, last 90 days** — every public repo, but only the five headline
-  event types (watch/fork/issues/PRs/releases). Enough for "what's trending"
-  and recent comparisons of any repo.
+- **Curated, full history, all event types** — ~27 marquee orgs/repos: the
+  `ClickHouse`, `duckdb`, `vuejs`, `kubernetes`, `rust-lang`, `pytorch`,
+  `grafana`, `huggingface`, `openai`, `langchain-ai`, `sveltejs`,
+  `anthropics` and `ggerganov`/`ggml-org` orgs, plus `facebook/react`,
+  `microsoft/vscode`, `triggerdotdev/trigger.dev`, `apache/spark`,
+  `nodejs/node`, `python/cpython`, `golang/go`, `angular/angular`,
+  `vercel/next.js`, `torvalds/linux`, `microsoft/TypeScript`,
+  `ollama/ollama` and `postgres/postgres`. Multi-year trends, push rhythms,
+  contributor churn: all answerable here.
+- **Global, last 30 days, all event types** — every other public repo.
+  Enough for "what's trending" and recent deep-dives of any repo.
 
-The agent knows this contract and words its answers (and its suggested
-follow-up questions) to stay inside it.
+The agent knows this contract — and the source's quirks (org renames, fields
+that go dark in recent data) — and words its answers and suggested follow-ups
+to stay inside it.
 
 ## How it works
 

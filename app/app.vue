@@ -10,12 +10,20 @@ const view = ref<'chat' | 'pulse'>('chat')
 onMounted(() => {
   if (location.search.includes('pulse')) view.value = 'pulse'
 })
+
+// The brand is a real link to "/", but a restored session would bring the
+// conversation back instead of the landing page — clear it first. Modified
+// clicks (new tab) keep the current session untouched.
+function goHome(e: MouseEvent) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey) return
+  clearChatSession()
+}
 </script>
 
 <template>
   <main class="wrap">
     <header class="top">
-      <h1>gh-pulse</h1>
+      <h1><a href="/" @click="goHome">gh-pulse</a></h1>
       <p class="sub">Ask about GitHub activity — get charts, not paragraphs.</p>
       <nav v-if="!showGallery" class="tabs">
         <button type="button" :class="{ on: view === 'chat' }" @click="view = 'chat'">Chat</button>
@@ -73,6 +81,10 @@ h1 {
   font-size: 1.35rem;
   margin: 0;
   letter-spacing: -0.01em;
+}
+h1 a {
+  color: inherit;
+  text-decoration: none;
 }
 .sub,
 .loading {

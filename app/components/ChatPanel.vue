@@ -15,12 +15,11 @@ function renderMarkdown(text: string) {
 // turns rehydrate from the Postgres capture, and an in-flight stream resumes
 // via the transport's reconnect path. sessionStorage keeps it per-tab — a new
 // tab is a new conversation.
-const STORAGE_KEY = 'gh-pulse-session'
 type PersistedSession = { chatId: string; session: ChatSessionPersistedState }
 
 const restored: PersistedSession | null = (() => {
   try {
-    return JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null')
+    return JSON.parse(sessionStorage.getItem(CHAT_SESSION_KEY) ?? 'null')
   } catch {
     return null
   }
@@ -41,15 +40,15 @@ const transport = new TriggerChatTransport({
     $fetch('/api/chat/session', { method: 'POST', body: { chatId, clientData } }),
   sessions: restored ? { [chatId]: restored.session } : undefined,
   onSessionChange: (id, session) => {
-    if (session) sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ chatId: id, session }))
-    else sessionStorage.removeItem(STORAGE_KEY)
+    if (session) sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify({ chatId: id, session }))
+    else clearChatSession()
   },
 })
 
 const chat = new Chat({ id: chatId, transport })
 
 function newChat() {
-  sessionStorage.removeItem(STORAGE_KEY)
+  clearChatSession()
   location.assign(location.pathname)
 }
 

@@ -8,10 +8,13 @@ const curated = [
   { label: 'ClickHouse (org)', ask: 'Give me an overview of the ClickHouse org' },
   { label: 'DuckDB (org)', ask: 'Give me an overview of the duckdb org' },
   { label: 'Vue.js (org)', ask: 'Give me an overview of the vuejs org' },
-  { label: 'facebook/react', ask: 'Tell me about facebook/react' },
+  { label: 'Kubernetes (org)', ask: 'Give me an overview of the kubernetes org' },
+  { label: 'PyTorch (org)', ask: 'Give me an overview of the pytorch org' },
+  { label: 'Rust (org)', ask: 'Give me an overview of the rust-lang org' },
   { label: 'microsoft/vscode', ask: 'Tell me about microsoft/vscode' },
   { label: 'anthropics/claude-code', ask: 'Tell me about anthropics/claude-code' },
   { label: 'triggerdotdev/trigger.dev', ask: 'Tell me about triggerdotdev/trigger.dev' },
+  { label: 'ollama/ollama', ask: 'Tell me about ollama/ollama' },
 ]
 
 const groups = [
@@ -38,7 +41,7 @@ const groups = [
     name: 'Compare',
     blurb: 'head to head',
     questions: [
-      'vuejs/core vs facebook/react: monthly stars since 2022',
+      'vuejs/core vs sveltejs/svelte: monthly stars since 2022',
       'Compare ClickHouse, DuckDB and VS Code as projects',
     ],
   },
@@ -56,7 +59,7 @@ const groups = [
     name: 'Health',
     blurb: 'velocity and backlog',
     questions: [
-      'How long do PRs take to merge in facebook/react?',
+      'How long do PRs take to merge in kubernetes/kubernetes?',
       'Issues opened vs closed in microsoft/vscode this year',
       'What are the hottest issues in vuejs/core right now?',
     ],
@@ -68,14 +71,15 @@ const groups = [
   <div class="home">
     <div class="hero">
       <h2>Ask about GitHub activity — get charts, not paragraphs.</h2>
-      <p class="coverage-label">Full history since 2019 for:</p>
+      <p class="coverage-label">Full history, every event type:</p>
       <div class="repos">
         <button v-for="r in curated" :key="r.label" class="repo" type="button" @click="emit('ask', r.ask)">
           {{ r.label }}
         </button>
       </div>
       <p class="coverage-note">
-        Any other repo: stars, forks, issues, PRs and releases for the last 90 days.
+        …plus grafana, huggingface, openai, langchain, svelte, node, go, cpython, spark, next.js
+        and more. Any other repo: every event type, last 30 days.
       </p>
     </div>
     <div class="groups">
