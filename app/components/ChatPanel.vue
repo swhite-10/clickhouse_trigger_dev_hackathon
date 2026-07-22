@@ -66,6 +66,29 @@ function ask(question: string) {
 const hasMessages = computed(() => chat.messages.length > 0)
 const busy = computed(() => chat.status === 'streaming' || chat.status === 'submitted')
 
+// True for the gap between hitting send and the first part actually landing
+// (Opus deciding what to do costs several silent seconds before any tool
+// call or text shows up) — without this the UI looks stalled right after
+// the question is asked, which is the part users actually notice.
+const awaitingResponse = computed(() => {
+  if (!busy.value) return false
+  const last = chat.messages[chat.messages.length - 1]
+  if (!last || last.role === 'user') return true
+  return (last.parts as AnyPart[]).length === 0
+})
+const lastUserQuestion = computed(() => {
+  for (let i = chat.messages.length - 1; i >= 0; i--) {
+    const m = chat.messages[i]
+    if (m.role === 'user') {
+      return (m.parts as AnyPart[])
+        .filter((p) => p.type === 'text')
+        .map((p) => p.text)
+        .join(' ')
+    }
+  }
+  return ''
+})
+
 // Loose part shape: tool parts carry state/output/errorText, text parts text.
 // The AI SDK's UIMessagePart union is generic over the tool set, which this
 // untyped Chat doesn't know — narrow by hand like the rest of the template.
@@ -182,21 +205,28 @@ onMounted(async () => {
   await nextTick()
   inputEl.value?.focus()
 })
+// One deep watcher keeps both panes following the stream. The rail pins
+// to its bottom; the canvas instead anchors to the TOP of its newest
+// block — a dashboard is taller than the viewport, so pinning the bottom
+// would scroll its opening stat cards out of view as panels land.
+// Smoothing comes from the panes' scroll-behavior CSS.
 watch(
   () => chat.messages,
   async () => {
     await nextTick()
     railScroller.value?.scrollTo({ top: railScroller.value.scrollHeight })
+    canvasEl.value?.querySelector('.block:last-child')?.scrollIntoView({ block: 'start' })
   },
   { deep: true },
 )
-watch(
-  () => blocks.value[blocks.value.length - 1]?.key,
-  async () => {
-    await nextTick()
-    canvasEl.value?.scrollTo({ top: canvasEl.value.scrollHeight, behavior: 'smooth' })
-  },
-)
+// Follow-up chips appear on the status flip back to idle — not a message
+// mutation — so the watcher above never fires for them; scroll the rail
+// again once they render so they're in view.
+watch(followups, async (chips) => {
+  if (!chips.length) return
+  await nextTick()
+  railScroller.value?.scrollTo({ top: railScroller.value.scrollHeight })
+})
 </script>
 
 <template>
@@ -231,6 +261,7 @@ watch(
               </p>
             </template>
           </div>
+          <p v-if="awaitingResponse" class="toolstatus running">thinking…</p>
           <div v-if="followups.length" class="followups">
             <button v-for="q in followups" :key="q" class="chip" type="button" @click="ask(q)">
               {{ q }}
@@ -292,6 +323,13 @@ watch(
               <summary>SQL</summary>
               <pre>{{ b.part.output.sql }}</pre>
             </details>
+          </div>
+        </div>
+
+        <div v-if="awaitingResponse" class="block">
+          <p class="block-q">{{ lastUserQuestion }}</p>
+          <div class="card pending">
+            <p class="meta running">thinking…</p>
           </div>
         </div>
       </section>
