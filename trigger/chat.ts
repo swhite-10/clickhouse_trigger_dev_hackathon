@@ -36,6 +36,14 @@ const chartSchema = z.object({
   title: z.string().describe('short human-readable chart title'),
 })
 
+const followupsSchema = z
+  .array(z.string())
+  .max(3)
+  .optional()
+  .describe(
+    '2-3 short follow-up questions a curious user would ask next, phrased to be sent verbatim — rendered as clickable chips under your answer',
+  )
+
 type Panel = { sql: string; chart: z.infer<typeof chartSchema> }
 
 async function executePanel({ sql, chart }: Panel) {
@@ -70,8 +78,12 @@ export const tools = {
     inputSchema: z.object({
       sql: z.string().describe('A single ClickHouse SELECT statement'),
       chart: chartSchema,
+      followups: followupsSchema,
     }),
-    execute: executePanel,
+    execute: async ({ sql, chart, followups }) => ({
+      ...(await executePanel({ sql, chart })),
+      followups,
+    }),
   }),
 
   run_dashboard: tool({
@@ -80,11 +92,12 @@ export const tools = {
     inputSchema: z.object({
       title: z.string().describe('dashboard heading, e.g. "ClickHouse/ClickHouse — 2025 at a glance"'),
       panels: z.array(z.object({ sql: z.string(), chart: chartSchema })).min(2).max(8),
+      followups: followupsSchema,
     }),
-    execute: async ({ title, panels }) => {
+    execute: async ({ title, panels, followups }) => {
       const started = Date.now()
       const results = await Promise.all(panels.map(executePanel))
-      return { title, panels: results, totalMs: Date.now() - started }
+      return { title, panels: results, totalMs: Date.now() - started, followups }
     },
   }),
 
@@ -94,8 +107,9 @@ export const tools = {
     inputSchema: z.object({
       hours: z.number().int().min(1).max(168).describe('Look-back window in hours'),
       limit: z.number().int().min(1).max(50).describe('How many repos to return'),
+      followups: followupsSchema,
     }),
-    execute: async ({ hours, limit }) => {
+    execute: async ({ hours, limit, followups }) => {
       const started = Date.now()
       const result = await clickhouse.query({
         query: `
@@ -115,6 +129,7 @@ export const tools = {
         rows: rows.map((r) => ({ repo: r.repo_name, stars: Number(r.stars) })),
         durationMs: Date.now() - started,
         chart: { type: 'bar', x: 'repo', y: 'stars', title: `Stars gained, last ${hours}h` },
+        followups,
       }
     },
   }),
@@ -132,6 +147,18 @@ Therefore: make ONE tool call per question, then add at most one or two sentence
 - Bots are loud: for "top contributors" style questions exclude them with actor_login NOT LIKE '%[bot]%' AND actor_login NOT LIKE 'robot-%' unless the user asks about bots.
 - Data coverage (seeded subset, not the full GH Archive): a curated set of repos (ClickHouse/*, duckdb/*, vuejs/*, facebook/react, microsoft/vscode, anthropics/claude-code, triggerdotdev/trigger.dev) has FULL history, every event_type, back to 2019 — multi-year trends and repo deep-dives are safe for these. Every OTHER repo only has WatchEvent/ForkEvent/IssuesEvent/PullRequestEvent/ReleaseEvent, and only for the last 90 days. For global/cross-repo questions (not scoped to a curated repo), scope to created_at >= now() - INTERVAL 90 DAY and say so. Don't query global data older than that or outside those event types — it's empty, not just sparse.
 
+## Metric recipes
+Use these exact patterns — they answer the questions users most often get wrong:
+- Time to merge: group PullRequestEvent rows by number in a subquery, then aggregate:
+  SELECT m, round(quantile(0.5)(hours), 1) AS median_hours FROM (SELECT number, toStartOfMonth(min(created_at)) AS m, dateDiff('hour', min(created_at), max(merged_at)) AS hours FROM github_events WHERE event_type = 'PullRequestEvent' AND repo_name = 'X' GROUP BY number HAVING max(merged_at) > '1971-01-01') GROUP BY m ORDER BY m
+- New contributors per month: first-seen date per actor in a subquery — SELECT toStartOfMonth(first_seen) AS m, count() AS new_contributors FROM (SELECT actor_login, min(created_at) AS first_seen FROM github_events WHERE repo_name = 'X' AND event_type IN ('PullRequestEvent', 'PushEvent', 'IssuesEvent') AND actor_login NOT LIKE '%[bot]%' GROUP BY actor_login) GROUP BY m ORDER BY m
+- Community mix (core team vs external): author_association on action = 'opened' rows of PullRequestEvent or IssuesEvent — MEMBER/OWNER/COLLABORATOR are core, CONTRIBUTOR/NONE are external. Great as a pie, a monthly area to show a community growing, or a stacked bar comparing repos (GROUP BY repo, who). CAVEAT: the field is only populated through 2025 (all NONE from 2026) — always window these queries to created_at < '2026-01-01'.
+- Hottest issues: count() of IssueCommentEvent grouped by number with any(title) AS title over a recent window, ORDER BY count DESC — chart x = title.
+- PR size distribution: on action = 'opened' PullRequestEvent rows, bucket additions + deletions with multiIf(s < 10, 'XS', s < 100, 'S', s < 1000, 'M', 'XL') — order buckets explicitly, not alphabetically.
+- Rising repos: compare two windows in one pass with countIf(created_at > now() - INTERVAL 7 DAY) vs countIf(created_at BETWEEN now() - INTERVAL 14 DAY AND now() - INTERVAL 7 DAY), rank by growth; require a floor (older window >= 10) to kill noise.
+- Opened vs closed (issues or PRs) over time: group by a kind column to get one series per action — SELECT toStartOfMonth(created_at) AS m, action AS kind, count() AS c FROM github_events WHERE event_type = 'IssuesEvent' AND repo_name = 'X' AND action IN ('opened', 'closed') GROUP BY m, kind ORDER BY m — chart line/area with x = m, y = c, series = kind.
+- Release cadence: ReleaseEvent per month (line), or recent releases as a table of release_tag_name + created_at.
+
 ## SQL rules
 - One SELECT statement, read-only. No SETTINGS, no FORMAT clause, no INSERT/DDL.
 - Always add LIMIT (max ${MAX_ROWS}); one is injected if you forget.
@@ -140,7 +167,7 @@ Therefore: make ONE tool call per question, then add at most one or two sentence
 
 ## Charts
 Pick the type that maximises insight per pixel — vary them; don't default everything to bar.
-- bar: rankings / top-N. x = category alias, y = numeric alias, ORDER BY y DESC.
+- bar: rankings / top-N. x = category alias, y = numeric alias, ORDER BY y DESC. Optional series = alias that splits each bar into stacked segments — use for composition ACROSS categories (e.g. PR author_association mix per repo: GROUP BY repo, who; keep <= 6 distinct series values).
 - line: trends over time. x = time alias, y = numeric alias; optional series = alias splitting into one line per value (keep to <= 6 distinct values).
 - area: composition or volume over time — like line but filled; with a series alias the areas stack (e.g. event-type mix per month).
 - scatter: relationship between two measures across entities (e.g. issues opened vs PRs merged per repo — use countIf() to compute both in one query). x and y are numeric aliases; optional series colours groups.
@@ -161,6 +188,9 @@ run_dashboard runs every panel's query in parallel and renders a grid. Compose i
 - Keep panels small: stats 1 row, charts <= 30 rows (calendar excepted).
 - If a panel comes back with an error, fix that SQL and re-run JUST that panel via run_sql.
 
+## Follow-ups
+Every tool call accepts a followups array: include 2-3 short, natural next questions a curious user would ask after seeing this chart — they render as clickable chips. Go DEEPER or SIDEWAYS (drill into one repo, switch dimension, compare with a rival, zoom the time window), never re-ask the same thing. Phrase each so it works sent verbatim with no other context. Remember data coverage: only suggest multi-year or niche-event questions for the curated full-history repos.
+
 If run_sql returns an error, fix the SQL and try again (max 3 attempts), then briefly explain what failed.
 `.trim()
 
@@ -174,13 +204,17 @@ const CACHE_BREAKPOINT = {
 // chat.agent run parks between turns, its root span never ends, and OTel
 // only exports ended spans. So the attributes ride a zero-work child span
 // that ends (and therefore exports) immediately.
-function latestUserText(messages: ModelMessage[]): string | undefined {
-  const last = [...messages].reverse().find((m) => m.role === 'user')
-  if (!last) return undefined
+// First message, not latest: trace-meta re-fires every turn and Langfuse
+// keeps the last value it sees, so naming by the latest message left
+// multi-turn traces titled after corrections ("Hmm please recompute...").
+// The opening question names the conversation, like a chat thread title.
+function firstUserText(messages: ModelMessage[]): string | undefined {
+  const first = messages.find((m) => m.role === 'user')
+  if (!first) return undefined
   const text =
-    typeof last.content === 'string'
-      ? last.content
-      : last.content
+    typeof first.content === 'string'
+      ? first.content
+      : first.content
           .map((part) => (part.type === 'text' ? part.text : ''))
           .join(' ')
   const trimmed = text.trim()
@@ -195,7 +229,7 @@ export const ghPulseChat = chat.agent({
   run: async ({ chatId, messages, tools, signal }) => {
     trace.getTracer('gh-pulse').startActiveSpan('trace-meta', (span) => {
       span.setAttributes({
-        'langfuse.trace.name': latestUserText(messages) ?? 'gh-pulse chat turn',
+        'langfuse.trace.name': firstUserText(messages) ?? 'gh-pulse chat turn',
         'langfuse.session.id': chatId,
       })
       span.end()
