@@ -56,15 +56,20 @@ const input = ref('')
 function send() {
   const text = input.value.trim()
   if (!text) return
-  chat.sendMessage({ text })
+  ask(text)
   input.value = ''
 }
 function ask(question: string) {
+  sessionStorage.setItem(PENDING_TURN_KEY, '1')
   chat.sendMessage({ text: question })
 }
 
 const hasMessages = computed(() => chat.messages.length > 0)
 const busy = computed(() => chat.status === 'streaming' || chat.status === 'submitted')
+// Turn finished (normally or with an error) — no reply is owed anymore.
+watch(busy, (b) => {
+  if (!b) sessionStorage.removeItem(PENDING_TURN_KEY)
+})
 
 // True for the gap between hitting send and the first part actually landing
 // (Opus deciding what to do costs several silent seconds before any tool
@@ -174,12 +179,18 @@ onMounted(async () => {
   } catch {
     // best-effort: a failed history fetch shouldn't block new messages
   }
-  // Resume only when a reply is actually owed (last captured message is the
-  // user's, or nothing was captured yet). The persisted isStreaming flag
-  // alone can be stale — its final "done" update doesn't always flush before
-  // the refresh — and resuming an idle session parks the chat in 'streaming'
-  // until the SSE times out, hiding the follow-up chips.
-  const shouldResume = restored.session.isStreaming && hist.messages.at(-1)?.role !== 'assistant'
+  // Resume only when a reply is actually owed. The persisted isStreaming
+  // flag alone can be stale — its final "done" update doesn't always flush
+  // before the refresh — and resuming an idle session parks the chat in
+  // 'streaming' until the SSE times out, hiding the follow-up chips. A
+  // reply is owed when the pending-turn marker is set (send fired, turn
+  // never finished) or when the capture itself says the last word was the
+  // user's. The marker matters mid-conversation: capture only flushes at
+  // turn END, so during turn N the last captured message is turn N-1's
+  // answer and the history check alone would skip the resume.
+  const pendingTurn = !!sessionStorage.getItem(PENDING_TURN_KEY)
+  const shouldResume =
+    !!restored.session.isStreaming && (pendingTurn || hist.messages.at(-1)?.role !== 'assistant')
   if (shouldResume) chat.resumeStream()
   if (hist.messages.length || !shouldResume) {
     restoring.value = false
