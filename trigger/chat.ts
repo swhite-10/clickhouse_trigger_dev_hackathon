@@ -128,7 +128,17 @@ LIMIT ${limit}`
         durationMs: Date.now() - started,
         sql,
         chart: { type: 'bar', x: 'repo', y: 'stars', title: `Stars gained, last ${hours}h` },
-        followups,
+        // followups is optional in the schema (required would turn a model
+        // omission into a tool-call failure), and the model skips it on this
+        // tool often enough that the chips row can vanish — fall back to
+        // stock questions so there is always somewhere to click next.
+        followups: followups?.length
+          ? followups
+          : [
+              `Break the last ${hours} hours of activity down by event type`,
+              'Which repos are rising fastest week over week?',
+              `Which repos gained the most forks in the last ${hours} hours?`,
+            ],
       }
     },
   }),
