@@ -1,7 +1,7 @@
 # gh-pulse
 
 Ask questions about GitHub activity in natural language — get charts, not
-paragraphs. A chat agent that writes ClickHouse SQL against 11B+ GitHub
+paragraphs. A chat agent that writes ClickHouse SQL against 163M GitHub
 events and answers with interactive visualisations.
 
 Built for the ClickHouse + Trigger.dev Virtual Summer Hackathon
@@ -112,4 +112,4 @@ Day-to-day: `make seed-recent` tops up the last 3 days of global events, and
 `make warm` wakes ClickHouse Cloud after idle — the first query on a cold
 cluster pays ~20s of resume; every one after that is milliseconds.
 
-*Work in progress — build window 17–23 July 2026.*
+*Built in seven days, 17–23 July 2026.*
